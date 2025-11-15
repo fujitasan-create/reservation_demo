@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -23,6 +23,14 @@ class Resource(Base):
         comment="リソースタイプ（person/building/etc）",
     )
     description = Column(Text, nullable=True, comment="説明")
+    availability_schedule = Column(
+        JSON,
+        nullable=False,
+        comment="リソースの空き時間（ホテルなら空室、人間なら空いている出勤時間）",
+    )
+    profile = Column(Text, nullable=False, comment="プロフィール")
+    photos = Column(JSON, nullable=True, comment="写真のURL配列")
+    tags = Column(JSON, nullable=True, comment="タグの配列")
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
