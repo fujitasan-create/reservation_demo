@@ -35,6 +35,10 @@ class ResourceUsecase:
             name=resource_data.name,
             type=resource_data.type,
             description=resource_data.description,
+            availability_schedule=resource_data.availability_schedule,
+            profile=resource_data.profile,
+            photos=resource_data.photos,
+            tags=resource_data.tags,
         )
         created_resource = self.repository.create(resource)
         return ResourceResponse.model_validate(created_resource)

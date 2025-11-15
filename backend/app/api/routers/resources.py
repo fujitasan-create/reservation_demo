@@ -45,6 +45,10 @@ def create_resource(
     - **name**: リソース名（必須）
     - **type**: リソースタイプ（必須）
     - **description**: 説明（オプション）
+    - **availability_schedule**: リソースの空き時間（必須、JSON形式）
+    - **profile**: プロフィール（必須）
+    - **photos**: 写真のURL配列（オプション）
+    - **tags**: タグの配列（オプション）
     """
     return usecase.create_resource(resource_data)
 
