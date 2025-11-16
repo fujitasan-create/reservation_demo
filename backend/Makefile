@@ -69,6 +69,19 @@ lint:
 db:
 	@echo "Database file: ./test.db"
 
+## create-admin : 管理者アカウントを作成（インタラクティブ）
+create-admin:
+	$(PYTHON) scripts/create_admin.py
+
+## create-admin-cli : 管理者アカウントを作成（コマンドライン引数版）
+create-admin-cli:
+	@echo "使用方法: make create-admin-cli EMAIL=admin@example.com PASSWORD=password123"
+	@if [ -z "$(EMAIL)" ] || [ -z "$(PASSWORD)" ]; then \
+		echo "エラー: EMAILとPASSWORDを指定してください"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/create_admin_cli.py --email "$(EMAIL)" --password "$(PASSWORD)"
+
 ## clean : キャッシュ削除
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

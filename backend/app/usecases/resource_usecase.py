@@ -31,6 +31,13 @@ class ResourceUsecase:
         Returns:
             作成されたリソース
         """
+        # menu_servicesをJSON形式に変換（Noneの場合はNoneのまま）
+        menu_services_json = None
+        if resource_data.menu_services is not None:
+            menu_services_json = [
+                {"name": ms.name, "price": ms.price} for ms in resource_data.menu_services
+            ]
+
         resource = Resource(
             name=resource_data.name,
             type=resource_data.type,
@@ -39,6 +46,7 @@ class ResourceUsecase:
             profile=resource_data.profile,
             photos=resource_data.photos,
             tags=resource_data.tags,
+            menu_services=menu_services_json,
         )
         created_resource = self.repository.create(resource)
         return ResourceResponse.model_validate(created_resource)
@@ -98,6 +106,14 @@ class ResourceUsecase:
             ResourceNotFoundError: リソースが見つからない場合
         """
         update_dict = resource_data.model_dump(exclude_unset=True)
+
+        # menu_servicesをJSON形式に変換
+        if "menu_services" in update_dict and update_dict["menu_services"] is not None:
+            update_dict["menu_services"] = [
+                {"name": ms.name, "price": ms.price}
+                for ms in update_dict["menu_services"]
+            ]
+
         updated_resource = self.repository.update(resource_id, update_dict)
         if updated_resource is None:
             raise ResourceNotFoundError(f"Resource with id {resource_id} not found")

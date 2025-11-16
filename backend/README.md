@@ -53,6 +53,51 @@ export PATH="/c/Users/black/AppData/Local/Programs/Python/Python310/Scripts:$PAT
 
 その後、シェルを再起動するか、`source ~/.bashrc`を実行してください。
 
+## データベースマイグレーション
+
+マイグレーションを実行してデータベースをセットアップ：
+
+```bash
+# マイグレーションファイルの生成（モデル変更時）
+alembic revision --autogenerate -m "description"
+
+# マイグレーションの適用
+alembic upgrade head
+```
+
+## 管理者アカウントの作成
+
+マイグレーション完了後、管理者アカウントを作成します。
+
+### 方法1: インタラクティブ（推奨）
+
+```bash
+make create-admin
+```
+
+実行すると、メールアドレスとパスワードの入力を求められます。
+
+### 方法2: コマンドライン引数
+
+```bash
+make create-admin-cli EMAIL=admin@example.com PASSWORD=password123
+```
+
+### 方法3: Pythonスクリプトを直接実行
+
+```bash
+# インタラクティブ版
+uv run python scripts/create_admin.py
+
+# CLI版
+uv run python scripts/create_admin_cli.py --email admin@example.com --password password123
+```
+
+**注意**:
+- パスワードは4文字以上である必要があります
+- bcryptの制限により、72バイトを超えるパスワードは自動的に切り詰められます
+- 通常のASCII文字の場合は最大72文字まで使用可能です
+
 ## 使い方
 
 ```bash

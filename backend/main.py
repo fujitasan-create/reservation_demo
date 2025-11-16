@@ -1,8 +1,11 @@
 """FastAPIアプリケーションエントリーポイント"""
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import resources, reservations
+from app.api.routers import admin, auth, resources, reservations, salon, upload
 from app.config import settings
 
 app = FastAPI(
@@ -22,6 +25,10 @@ app.add_middleware(
 
 # ルーターの登録
 app.include_router(
+    auth.router,
+    prefix=settings.api_v1_prefix,
+)
+app.include_router(
     resources.router,
     prefix=settings.api_v1_prefix,
 )
@@ -29,6 +36,23 @@ app.include_router(
     reservations.router,
     prefix=settings.api_v1_prefix,
 )
+app.include_router(
+    admin.router,
+    prefix=settings.api_v1_prefix,
+)
+app.include_router(
+    upload.router,
+    prefix=settings.api_v1_prefix,
+)
+app.include_router(
+    salon.router,
+    prefix=settings.api_v1_prefix,
+)
+
+# 静的ファイル配信（画像アップロード用）
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 
 @app.get("/")

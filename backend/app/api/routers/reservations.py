@@ -1,11 +1,13 @@
 """Reservation関連のAPIルーター"""
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_database_session
+from app.api.dependencies import get_current_user, get_database_session
+from app.domain.entities.user import User
+from app.domain.entities.reservation import ReservationStatus
 from app.schemas.reservation_schema import (
     ReservationCreate,
     ReservationResponse,
@@ -260,6 +262,118 @@ def check_reservation_availability(
     except InvalidReservationTimeError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/resources/{resource_id}/availability/date/{target_date}",
+    summary="特定日の空き時間一覧を取得",
+)
+def get_availability_for_date(
+    resource_id: int,
+    target_date: date,
+    usecase: ReservationUsecase = Depends(get_reservation_usecase),
+) -> dict:
+    """
+    指定されたリソースの指定日の空き時間一覧を取得します。
+
+    - **resource_id**: リソースID
+    - **target_date**: 対象日（YYYY-MM-DD形式）
+
+    営業時間（9時〜21時）と美容師の出勤時間を考慮して、30分単位のタイムスロットを返します。
+    """
+    try:
+        return usecase.get_availability_for_date(resource_id, target_date)
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/resources/{resource_id}/availability/range",
+    summary="複数日の空き状況一覧を取得",
+)
+def get_availability_range(
+    resource_id: int,
+    start_date: date = Query(..., description="開始日（YYYY-MM-DD形式）"),
+    end_date: date = Query(..., description="終了日（YYYY-MM-DD形式）"),
+    usecase: ReservationUsecase = Depends(get_reservation_usecase),
+) -> dict:
+    """
+    指定されたリソースの複数日の空き状況一覧を取得します。
+
+    - **resource_id**: リソースID
+    - **start_date**: 開始日（YYYY-MM-DD形式）
+    - **end_date**: 終了日（YYYY-MM-DD形式）
+
+    カレンダー表示用のデータを返します。
+    """
+    try:
+        return usecase.get_availability_range(resource_id, start_date, end_date)
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/my",
+    response_model=List[ReservationResponse],
+    summary="ログインユーザーの予約一覧を取得",
+)
+def get_my_reservations(
+    skip: int = Query(0, ge=0, description="スキップする件数"),
+    limit: int = Query(100, ge=1, le=1000, description="取得する最大件数"),
+    current_user: User = Depends(get_current_user),
+    usecase: ReservationUsecase = Depends(get_reservation_usecase),
+) -> List[ReservationResponse]:
+    """
+    現在ログインしているユーザーの予約一覧を取得します。
+
+    認証が必要です。
+    """
+    return usecase.get_reservations(
+        skip=skip, limit=limit, customer_email=current_user.email
+    )
+
+
+@router.patch(
+    "/{reservation_id}/cancel",
+    response_model=ReservationResponse,
+    summary="予約をキャンセル",
+)
+def cancel_reservation(
+    reservation_id: int,
+    current_user: User = Depends(get_current_user),
+    usecase: ReservationUsecase = Depends(get_reservation_usecase),
+) -> ReservationResponse:
+    """
+    指定されたIDの予約をキャンセルします。
+
+    認証が必要です。自分の予約のみキャンセル可能です（管理者は全予約をキャンセル可能）。
+    """
+    try:
+        reservation = usecase.get_reservation(reservation_id)
+        # 自分の予約か確認（管理者は除く）
+        from app.domain.entities.user import UserRole
+
+        if current_user.role != UserRole.ADMIN:
+            if reservation.customer_email != current_user.email:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="自分の予約のみキャンセル可能です",
+                )
+
+        # ステータスをcancelledに更新
+        update_data = ReservationUpdate(status=ReservationStatus.CANCELLED)
+        return usecase.update_reservation(reservation_id, update_data)
+    except ReservationNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
 

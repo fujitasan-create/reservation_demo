@@ -1,10 +1,12 @@
 """Resource関連のAPIルーター"""
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_database_session
+from app.usecases.reservation_usecase import ReservationUsecase
 from app.schemas.resource_schema import (
     ResourceCreate,
     ResourceResponse,
@@ -142,5 +144,57 @@ def delete_resource(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/available",
+    response_model=List[ResourceResponse],
+    summary="指定日時に利用可能なリソース一覧を取得（フリー予約用）",
+)
+def get_available_resources(
+    date: datetime = Query(..., description="予約希望日時"),
+    duration_minutes: int = Query(30, ge=30, le=480, description="予約時間（分）"),
+    db: Session = Depends(get_database_session),
+    usecase: ResourceUsecase = Depends(get_resource_usecase),
+) -> List[ResourceResponse]:
+    """
+    指定された日時に利用可能なリソース一覧を取得します（フリー予約用）。
+
+    - **date**: 予約希望日時
+    - **duration_minutes**: 予約時間（分、デフォルト: 30分、最大: 480分）
+
+    営業時間（9時〜21時）と各リソースの出勤時間を考慮して、利用可能なリソースを返します。
+    """
+    from datetime import timedelta
+
+    from app.usecases.reservation_usecase import ReservationUsecase
+
+    reservation_usecase = ReservationUsecase(db)
+
+    try:
+        # 全リソースを取得
+        all_resources = usecase.get_resources(limit=1000)
+
+        # 各リソースの利用可能性を確認
+        available_resources = []
+        end_time = date + timedelta(minutes=duration_minutes)
+
+        for resource in all_resources:
+            try:
+                is_available = reservation_usecase.check_availability(
+                    resource.id, date, end_time
+                )
+                if is_available:
+                    available_resources.append(resource)
+            except Exception:
+                # エラーが発生した場合はスキップ
+                continue
+
+        return available_resources
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"リソース取得中にエラーが発生しました: {str(e)}",
         ) from e
 

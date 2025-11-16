@@ -5,6 +5,13 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class MenuService(BaseModel):
+    """メニュー・サービス情報"""
+
+    name: str = Field(..., description="メニュー名（例: カット、カラー、縮毛矯正）")
+    price: int = Field(..., ge=0, description="価格")
+
+
 class ResourceBase(BaseModel):
     """Resourceの基底スキーマ"""
 
@@ -15,9 +22,12 @@ class ResourceBase(BaseModel):
         ...,
         description="リソースの空き時間（ホテルなら空室、人間なら空いている出勤時間）",
     )
-    profile: str = Field(..., min_length=1, description="プロフィール")
+    profile: str = Field(..., description="プロフィール（空文字列も可）")
     photos: Optional[List[str]] = Field(None, description="写真のURL配列")
     tags: Optional[List[str]] = Field(None, description="タグの配列")
+    menu_services: Optional[List[MenuService]] = Field(
+        None, description="メニュー・サービス情報"
+    )
 
 
 class ResourceCreate(ResourceBase):
@@ -36,9 +46,12 @@ class ResourceUpdate(BaseModel):
         None,
         description="リソースの空き時間（ホテルなら空室、人間なら空いている出勤時間）",
     )
-    profile: Optional[str] = Field(None, min_length=1, description="プロフィール")
+    profile: Optional[str] = Field(None, description="プロフィール（空文字列も可）")
     photos: Optional[List[str]] = Field(None, description="写真のURL配列")
     tags: Optional[List[str]] = Field(None, description="タグの配列")
+    menu_services: Optional[List[MenuService]] = Field(
+        None, description="メニュー・サービス情報"
+    )
 
 
 class ResourceResponse(ResourceBase):
