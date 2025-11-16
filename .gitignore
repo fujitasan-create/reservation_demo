@@ -2,4 +2,5 @@
 .cursor/
 .env
 *.env
+/.env
 docker-compose.yml

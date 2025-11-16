@@ -31,6 +31,11 @@ class Resource(Base):
     profile = Column(Text, nullable=False, comment="プロフィール")
     photos = Column(JSON, nullable=True, comment="写真のURL配列")
     tags = Column(JSON, nullable=True, comment="タグの配列")
+    menu_services = Column(
+        JSON,
+        nullable=True,
+        comment="メニュー・サービス情報（例: [{\"name\": \"カット\", \"price\": 3000}, ...]）",
+    )
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

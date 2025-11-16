@@ -1,6 +1,6 @@
 """Reservation関連のユースケース"""
-from datetime import datetime
-from typing import List, Optional
+from datetime import date, datetime, timedelta
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.schemas.reservation_schema import (
     ReservationResponse,
     ReservationUpdate,
 )
+from app.config import settings
 from app.usecases.exceptions import (
     InvalidReservationTimeError,
     ReservationConflictError,
@@ -305,4 +306,155 @@ class ReservationUsecase:
             return True
         except ReservationConflictError:
             return False
+
+    def get_availability_for_date(
+        self, resource_id: int, target_date: date
+    ) -> Dict[str, any]:
+        """
+        指定された日の空き時間一覧を取得（30分単位）
+
+        Args:
+            resource_id: リソースID
+            target_date: 対象日
+
+        Returns:
+            空き時間一覧（時間帯ごとの利用可能性）
+
+        Raises:
+            ResourceNotFoundError: リソースが見つからない場合
+        """
+        # リソースの存在確認
+        resource = self.resource_repository.get(resource_id)
+        if resource is None:
+            raise ResourceNotFoundError(
+                f"Resource with id {resource_id} not found"
+            )
+
+        # 営業時間の設定（9時〜21時）
+        business_start = settings.business_hours_start
+        business_end = settings.business_hours_end
+
+        # 対象日の開始時刻と終了時刻
+        target_datetime_start = datetime.combine(
+            target_date, datetime.min.time().replace(hour=business_start)
+        ).replace(tzinfo=None)
+
+        target_datetime_end = datetime.combine(
+            target_date, datetime.min.time().replace(hour=business_end)
+        ).replace(tzinfo=None)
+
+        # 美容師の出勤時間（availability_schedule）を確認
+        # availability_scheduleの形式: {"monday": [9, 10, 11, ...], "tuesday": [...], ...}
+        # または {"weekdays": [9, 10, ...], "saturday": [...], ...}
+        weekday_name = target_date.strftime("%A").lower()  # monday, tuesday, etc.
+        weekday_index = target_date.weekday()  # 0=Monday, 6=Sunday
+
+        # availability_scheduleから対象日の出勤時間を取得
+        availability_schedule = resource.availability_schedule
+        working_hours = []
+
+        if isinstance(availability_schedule, dict):
+            # 曜日名で検索
+            if weekday_name in availability_schedule:
+                working_hours = availability_schedule[weekday_name]
+            # 曜日インデックスで検索（0-6）
+            elif str(weekday_index) in availability_schedule:
+                working_hours = availability_schedule[str(weekday_index)]
+            # weekdaysなどで検索
+            elif weekday_index < 5 and "weekdays" in availability_schedule:
+                working_hours = availability_schedule["weekdays"]
+            elif weekday_index == 5 and "saturday" in availability_schedule:
+                working_hours = availability_schedule["saturday"]
+            elif weekday_index == 6 and "sunday" in availability_schedule:
+                working_hours = availability_schedule["sunday"]
+            # デフォルト: 営業時間すべて
+            if not working_hours:
+                working_hours = list(range(business_start, business_end))
+        else:
+            # デフォルト: 営業時間すべて
+            working_hours = list(range(business_start, business_end))
+
+        # その日の予約一覧を取得
+        reservations = self.reservation_repository.get_by_resource_id(
+            resource_id, skip=0, limit=1000
+        )
+        # 対象日の予約のみフィルタリング
+        day_reservations = [
+            r
+            for r in reservations
+            if r.start_time.date() == target_date
+            and r.status.value != "cancelled"
+        ]
+
+        # 30分単位のタイムスロットを生成
+        time_slots = []
+        for hour in working_hours:
+            for minute in [0, 30]:
+                slot_time = datetime.combine(
+                    target_date, datetime.min.time().replace(hour=hour, minute=minute)
+                )
+
+                # 営業時間内か確認
+                if (
+                    slot_time.hour < business_start
+                    or slot_time.hour >= business_end
+                    or (slot_time.hour == business_end and slot_time.minute > 0)
+                ):
+                    continue
+
+                # この時間帯が予約済みか確認
+                slot_end = slot_time + timedelta(minutes=30)
+                is_available = True
+
+                for reservation in day_reservations:
+                    # 時間帯が予約と重複するか確認
+                    if (
+                        slot_time < reservation.end_time
+                        and slot_end > reservation.start_time
+                    ):
+                        is_available = False
+                        break
+
+                time_slots.append(
+                    {
+                        "time": slot_time.isoformat(),
+                        "hour": hour,
+                        "minute": minute,
+                        "available": is_available,
+                    }
+                )
+
+        return {
+            "date": target_date.isoformat(),
+            "resource_id": resource_id,
+            "time_slots": time_slots,
+        }
+
+    def get_availability_range(
+        self, resource_id: int, start_date: date, end_date: date
+    ) -> Dict[str, any]:
+        """
+        複数日の空き状況一覧を取得
+
+        Args:
+            resource_id: リソースID
+            start_date: 開始日
+            end_date: 終了日
+
+        Returns:
+            複数日の空き状況一覧
+        """
+        results = []
+        current_date = start_date
+        while current_date <= end_date:
+            availability = self.get_availability_for_date(resource_id, current_date)
+            results.append(availability)
+            current_date += timedelta(days=1)
+
+        return {
+            "resource_id": resource_id,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "availability": results,
+        }
 
